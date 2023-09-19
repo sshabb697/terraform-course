@@ -1,11 +1,10 @@
-resource "azurerm_resource_group" "rg" {
+data "azurerm_resource_group" "rg" {
   name     = var.resource_group_name
-  location = var.location
 }
 
 resource "azurerm_storage_account" "storage" {
   name                     = var.storage_account_name
-  resource_group_name      = azurerm_resource_group.rg.name
+  resource_group_name      = data.azurerm_resource_group.rg.name
   location                 = var.location
   account_tier             = "Standard"
   account_replication_type = "LRS"
@@ -24,4 +23,15 @@ resource "azurerm_storage_blob" "blob" {
   storage_container_name = azurerm_storage_container.container.name
   type                   = "Block"
   source                 = "commands.sh"
+}
+
+resource "azurerm_storage_account_network_rules" "example" {
+  storage_account_id = azurerm_storage_account.storage.id
+
+  default_action             = "Deny"
+  ip_rules                   = ["103.24.21.67"]
+  bypass                     = ["AzureServices"]
+  private_link_access {
+    endpoint_resource_id = "/subscriptions/*/resourcegroups/*/providers/Microsoft.DataFactory/factories/*"
+  }
 }
