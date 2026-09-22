@@ -33,11 +33,11 @@ parameters:
       - destroy
 
 variables:
-  - group: terraform-linux-vm
+  # - group: terraform-linux-vm
   - name: workingDirectory
     value: $(System.DefaultWorkingDirectory)/06_vm_linux
   - name: azureServiceConnection
-    value: azure-terraform
+    value: connection to azure
   - name: terraformVersion
     value: 1.6.6
 
