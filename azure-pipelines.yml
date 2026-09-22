@@ -1,4 +1,8 @@
 # Creates the Linux VM from 06_vm_linux
+# Uses Terraform extension tasks (not Azure CLI scripts).
+# Install: Marketplace → "Terraform" by Charles Zipp
+#   (If you installed Microsoft DevLabs instead, change TerraformTaskV4@4 → TerraformTask@5)
+#
 # Default CI = plan only. Manual run: set action to apply or destroy.
 
 trigger:
@@ -31,7 +35,7 @@ parameters:
 variables:
   - group: terraform-linux-vm
   - name: workingDirectory
-    value: 06_vm_linux
+    value: $(System.DefaultWorkingDirectory)/06_vm_linux
   - name: azureServiceConnection
     value: azure-terraform
   - name: terraformVersion
@@ -45,53 +49,43 @@ stages:
     displayName: Validate and plan
     jobs:
       - job: Plan
-        displayName: terraform fmt / init / validate / plan
+        displayName: Terraform init / validate / plan
         steps:
           - checkout: self
 
-          - task: AzureCLI@2
-            displayName: Install Terraform and plan
+          - task: TerraformInstaller@1
+            displayName: Install Terraform
             inputs:
-              azureSubscription: $(azureServiceConnection)
-              scriptType: bash
-              scriptLocation: inlineScript
-              addSpnToEnvironment: true
+              terraformVersion: $(terraformVersion)
+
+          - task: TerraformTaskV4@4
+            displayName: Terraform init
+            inputs:
+              provider: azurerm
+              command: init
               workingDirectory: $(workingDirectory)
-              inlineScript: |
-                set -euo pipefail
+              backendServiceArm: $(azureServiceConnection)
+              backendAzureRmResourceGroupName: $(TF_BACKEND_RG)
+              backendAzureRmStorageAccountName: $(TF_BACKEND_STORAGE)
+              backendAzureRmContainerName: $(TF_BACKEND_CONTAINER)
+              backendAzureRmKey: $(TF_BACKEND_KEY)
 
-                curl -fsSLo /tmp/terraform.zip \
-                  "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
-                unzip -o /tmp/terraform.zip -d /tmp
-                sudo mv /tmp/terraform /usr/local/bin/terraform
-                terraform version
+          - task: TerraformTaskV4@4
+            displayName: Terraform validate
+            inputs:
+              provider: azurerm
+              command: validate
+              workingDirectory: $(workingDirectory)
+              environmentServiceNameAzureRM: $(azureServiceConnection)
 
-                export ARM_CLIENT_ID="$servicePrincipalId"
-                export ARM_CLIENT_SECRET="$servicePrincipalKey"
-                export ARM_TENANT_ID="$tenantId"
-                export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
-                if [ -n "${idToken:-}" ]; then
-                  export ARM_OIDC_TOKEN="$idToken"
-                  export ARM_USE_OIDC=true
-                  unset ARM_CLIENT_SECRET
-                fi
-
-                terraform fmt -check -recursive || terraform fmt -recursive
-
-                terraform init -input=false \
-                  -backend-config="resource_group_name=${TF_BACKEND_RG}" \
-                  -backend-config="storage_account_name=${TF_BACKEND_STORAGE}" \
-                  -backend-config="container_name=${TF_BACKEND_CONTAINER}" \
-                  -backend-config="key=${TF_BACKEND_KEY}"
-
-                terraform validate
-                terraform plan -input=false -out=tfplan
-            env:
-              TERRAFORM_VERSION: $(terraformVersion)
-              TF_BACKEND_RG: $(TF_BACKEND_RG)
-              TF_BACKEND_STORAGE: $(TF_BACKEND_STORAGE)
-              TF_BACKEND_CONTAINER: $(TF_BACKEND_CONTAINER)
-              TF_BACKEND_KEY: $(TF_BACKEND_KEY)
+          - task: TerraformTaskV4@4
+            displayName: Terraform plan
+            inputs:
+              provider: azurerm
+              command: plan
+              workingDirectory: $(workingDirectory)
+              environmentServiceNameAzureRM: $(azureServiceConnection)
+              commandOptions: -input=false -out=tfplan
 
           - task: PublishPipelineArtifact@1
             displayName: Publish plan file
@@ -105,7 +99,7 @@ stages:
     condition: and(succeeded(), eq('${{ parameters.action }}', 'apply'))
     jobs:
       - deployment: ApplyVm
-        displayName: terraform apply
+        displayName: Terraform apply
         environment: linux-vm-apply
         strategy:
           runOnce:
@@ -116,47 +110,34 @@ stages:
                 - download: current
                   artifact: tfplan
 
-                - task: AzureCLI@2
-                  displayName: terraform apply
+                - task: TerraformInstaller@1
+                  displayName: Install Terraform
                   inputs:
-                    azureSubscription: $(azureServiceConnection)
-                    scriptType: bash
-                    scriptLocation: inlineScript
-                    addSpnToEnvironment: true
+                    terraformVersion: $(terraformVersion)
+
+                - task: TerraformTaskV4@4
+                  displayName: Terraform init
+                  inputs:
+                    provider: azurerm
+                    command: init
                     workingDirectory: $(workingDirectory)
-                    inlineScript: |
-                      set -euo pipefail
+                    backendServiceArm: $(azureServiceConnection)
+                    backendAzureRmResourceGroupName: $(TF_BACKEND_RG)
+                    backendAzureRmStorageAccountName: $(TF_BACKEND_STORAGE)
+                    backendAzureRmContainerName: $(TF_BACKEND_CONTAINER)
+                    backendAzureRmKey: $(TF_BACKEND_KEY)
 
-                      curl -fsSLo /tmp/terraform.zip \
-                        "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
-                      unzip -o /tmp/terraform.zip -d /tmp
-                      sudo mv /tmp/terraform /usr/local/bin/terraform
+                - bash: cp "$(Pipeline.Workspace)/tfplan/tfplan" "$(workingDirectory)/tfplan"
+                  displayName: Copy plan artifact
 
-                      export ARM_CLIENT_ID="$servicePrincipalId"
-                      export ARM_CLIENT_SECRET="$servicePrincipalKey"
-                      export ARM_TENANT_ID="$tenantId"
-                      export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
-                      if [ -n "${idToken:-}" ]; then
-                        export ARM_OIDC_TOKEN="$idToken"
-                        export ARM_USE_OIDC=true
-                        unset ARM_CLIENT_SECRET
-                      fi
-
-                      terraform init -input=false \
-                        -backend-config="resource_group_name=${TF_BACKEND_RG}" \
-                        -backend-config="storage_account_name=${TF_BACKEND_STORAGE}" \
-                        -backend-config="container_name=${TF_BACKEND_CONTAINER}" \
-                        -backend-config="key=${TF_BACKEND_KEY}"
-
-                      cp "$(Pipeline.Workspace)/tfplan/tfplan" ./tfplan
-                      terraform apply -input=false tfplan
-                      terraform output -json | jq 'del(.tls_private_key)'
-                  env:
-                    TERRAFORM_VERSION: $(terraformVersion)
-                    TF_BACKEND_RG: $(TF_BACKEND_RG)
-                    TF_BACKEND_STORAGE: $(TF_BACKEND_STORAGE)
-                    TF_BACKEND_CONTAINER: $(TF_BACKEND_CONTAINER)
-                    TF_BACKEND_KEY: $(TF_BACKEND_KEY)
+                - task: TerraformTaskV4@4
+                  displayName: Terraform apply
+                  inputs:
+                    provider: azurerm
+                    command: apply
+                    workingDirectory: $(workingDirectory)
+                    environmentServiceNameAzureRM: $(azureServiceConnection)
+                    commandOptions: -input=false -auto-approve tfplan
 
   - stage: Destroy
     displayName: Destroy Linux VM
@@ -164,7 +145,7 @@ stages:
     condition: and(succeeded(), eq('${{ parameters.action }}', 'destroy'))
     jobs:
       - deployment: DestroyVm
-        displayName: terraform destroy
+        displayName: Terraform destroy
         environment: linux-vm-apply
         strategy:
           runOnce:
@@ -172,42 +153,28 @@ stages:
               steps:
                 - checkout: self
 
-                - task: AzureCLI@2
-                  displayName: terraform destroy
+                - task: TerraformInstaller@1
+                  displayName: Install Terraform
                   inputs:
-                    azureSubscription: $(azureServiceConnection)
-                    scriptType: bash
-                    scriptLocation: inlineScript
-                    addSpnToEnvironment: true
+                    terraformVersion: $(terraformVersion)
+
+                - task: TerraformTaskV4@4
+                  displayName: Terraform init
+                  inputs:
+                    provider: azurerm
+                    command: init
                     workingDirectory: $(workingDirectory)
-                    inlineScript: |
-                      set -euo pipefail
+                    backendServiceArm: $(azureServiceConnection)
+                    backendAzureRmResourceGroupName: $(TF_BACKEND_RG)
+                    backendAzureRmStorageAccountName: $(TF_BACKEND_STORAGE)
+                    backendAzureRmContainerName: $(TF_BACKEND_CONTAINER)
+                    backendAzureRmKey: $(TF_BACKEND_KEY)
 
-                      curl -fsSLo /tmp/terraform.zip \
-                        "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
-                      unzip -o /tmp/terraform.zip -d /tmp
-                      sudo mv /tmp/terraform /usr/local/bin/terraform
-
-                      export ARM_CLIENT_ID="$servicePrincipalId"
-                      export ARM_CLIENT_SECRET="$servicePrincipalKey"
-                      export ARM_TENANT_ID="$tenantId"
-                      export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
-                      if [ -n "${idToken:-}" ]; then
-                        export ARM_OIDC_TOKEN="$idToken"
-                        export ARM_USE_OIDC=true
-                        unset ARM_CLIENT_SECRET
-                      fi
-
-                      terraform init -input=false \
-                        -backend-config="resource_group_name=${TF_BACKEND_RG}" \
-                        -backend-config="storage_account_name=${TF_BACKEND_STORAGE}" \
-                        -backend-config="container_name=${TF_BACKEND_CONTAINER}" \
-                        -backend-config="key=${TF_BACKEND_KEY}"
-
-                      terraform destroy -input=false -auto-approve
-                  env:
-                    TERRAFORM_VERSION: $(terraformVersion)
-                    TF_BACKEND_RG: $(TF_BACKEND_RG)
-                    TF_BACKEND_STORAGE: $(TF_BACKEND_STORAGE)
-                    TF_BACKEND_CONTAINER: $(TF_BACKEND_CONTAINER)
-                    TF_BACKEND_KEY: $(TF_BACKEND_KEY)
+                - task: TerraformTaskV4@4
+                  displayName: Terraform destroy
+                  inputs:
+                    provider: azurerm
+                    command: destroy
+                    workingDirectory: $(workingDirectory)
+                    environmentServiceNameAzureRM: $(azureServiceConnection)
+                    commandOptions: -input=false -auto-approve

@@ -2,9 +2,17 @@
 
 Pipeline file (repo root): `azure-pipelines.yml`
 
+Uses **Terraform extension tasks** (`TerraformInstaller@1`, `TerraformTaskV4@4`), not Azure CLI scripts.
+
+## Install the extension
+
+Organization settings → **Extensions** → Browse marketplace → install **[Terraform](https://marketplace.visualstudio.com/items?itemName=charleszipp.azure-pipelines-tasks-terraform)** by Charles Zipp.
+
+If you installed **Terraform by Microsoft DevLabs** instead, in the YAML change every `TerraformTaskV4@4` to `TerraformTask@5` (same inputs).
+
 | Parameter `action` | Result |
 | ------------------ | ------ |
-| `plan` (default) | fmt / init / validate / plan — **no VM** |
+| `plan` (default) | init / validate / plan — **no VM** |
 | `apply` | Creates the Ubuntu VM |
 | `destroy` | Deletes the VM and related resources |
 
@@ -22,11 +30,10 @@ az storage account create -n UNIQUE_STATE_ACCOUNT -g tfstate-rg --sku Standard_L
 az storage container create -n tfstate --account-name UNIQUE_STATE_ACCOUNT
 ```
 
-Values are passed into `backend.tf` (`backend "azurerm" {}`) by the pipeline.
-
 ### 2. Service connection
 
-Name: **`azure-terraform`** (Azure Resource Manager). Needs Contributor.
+Name: **`azure-terraform`** (Azure Resource Manager). Needs Contributor.  
+The Terraform tasks use this for **init** (`backendServiceArm`) and **plan/apply/destroy** (`environmentServiceNameAzureRM`).
 
 ### 3. Variable group `terraform-linux-vm`
 
@@ -51,6 +58,4 @@ To create the VM: Run → set **action = apply** → approve.
 
 Destroy when finished: **action = destroy**. VM size is billed.
 
-SSH user: `azureuser`. Private key is in Terraform state (sensitive). Do not paste it into chat or logs.
-
-If apply fails on image or public IP, see notes in the devops2026 course copy: `Terraform-5-Day-Course/pipelines/linux-vm/README.md`.
+SSH user: `azureuser`. Private key is in Terraform state (sensitive).
