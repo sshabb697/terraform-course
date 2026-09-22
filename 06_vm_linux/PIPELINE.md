@@ -59,3 +59,14 @@ To create the VM: Run → set **action = apply** → approve.
 Destroy when finished: **action = destroy**. VM size is billed.
 
 SSH user: `azureuser`. Private key is in Terraform state (sensitive).
+
+---
+
+## Error: listing Service Principals 403 (graphrbac)
+
+`azurerm` **2.78.0** asks Azure AD Graph who the pipeline identity is. Most Azure DevOps service connections are not allowed to **list service principals** → 403.
+
+This lab now pins **azurerm ~> 3.117**, which uses Microsoft Graph instead. Re-run the pipeline after pulling this change.
+
+If you must stay on 2.x: Azure Portal → Entra ID → Roles → give the pipeline app **Directory Readers** (needs an admin). Upgrading the provider is the better fix.
+
