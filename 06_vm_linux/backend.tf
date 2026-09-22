@@ -1,12 +1,10 @@
-# Values come from the Azure DevOps pipeline (-backend-config).
-# Create the storage account once. See 06_vm_linux/PIPELINE.md
+# State storage lives in the existing lab resource group.
+# Storage account names cannot contain hyphens.
 terraform {
   backend "azurerm" {
-    resource_group_name   = "storagetfstate011"
-    storage_account_name  = "kml_rg_main-52ab83f918254310"
-    container_name        = "tfstate"
-    key                   = "terraform.tfstate"
+    resource_group_name  = "kml_rg_main-52ab83f918254310"
+    storage_account_name = "storagetfstate011"
+    container_name       = "tfstate"
+    key                  = "terraform.tfstate"
   }
 }
-
-

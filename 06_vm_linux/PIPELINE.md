@@ -20,6 +20,19 @@ CI on `main` is **plan only**. Apply and destroy are **manual** runs.
 
 ---
 
+The Linux VM is created **inside the existing resource group** `kml_rg_main-52ab83f918254310` (data source). Terraform will **not** create or delete that RG.
+
+Pipeline backend variables should match:
+
+| Variable | Value |
+| -------- | ----- |
+| `TF_BACKEND_RG` | `kml_rg_main-52ab83f918254310` |
+| `TF_BACKEND_STORAGE` | `storagetfstate011` |
+| `TF_BACKEND_CONTAINER` | `tfstate` |
+| `TF_BACKEND_KEY` | `terraform.tfstate` |
+
+---
+
 ## One-time setup
 
 ### 1. Remote state
