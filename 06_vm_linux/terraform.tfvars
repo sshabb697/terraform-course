@@ -1,4 +1,4 @@
-resource_group_name         = "kml_rg_main-52ab83f918254310"
+resource_group_name         = "kml_rg_main-357e61e19fa54ed6"
 virtual_network_name        = "vnetprod019"
 subnet_name                 = "subnet019"
 public_ip_name              = "publicip019"
